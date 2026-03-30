@@ -2,23 +2,23 @@ import {
   getKPIs,
   getRegistrationTrend,
   getWorkoutTrend,
-  getEffortDistribution,
+  getUserActivity,
   getRecentEvents,
 } from "@/lib/queries";
 import { KPICards } from "./_components/kpi-cards";
 import { RegistrationChart } from "./_components/registration-chart";
 import { WorkoutChart } from "./_components/workout-chart";
-import { EffortChart } from "./_components/effort-chart";
+import { UserActivityTable } from "./_components/user-activity-table";
 import { RecentEventsTable } from "./_components/recent-events-table";
 
 export const dynamic = "force-dynamic";
 
 export default async function DashboardPage() {
-  const [kpis, registrations, workouts, effort, events] = await Promise.all([
+  const [kpis, registrations, workouts, users, events] = await Promise.all([
     getKPIs(),
     getRegistrationTrend(30),
     getWorkoutTrend(30),
-    getEffortDistribution(),
+    getUserActivity(),
     getRecentEvents(50),
   ]);
 
@@ -31,7 +31,7 @@ export default async function DashboardPage() {
         <WorkoutChart data={workouts} />
       </div>
 
-      <EffortChart data={effort} />
+      <UserActivityTable users={users} />
 
       <RecentEventsTable events={events} />
     </div>

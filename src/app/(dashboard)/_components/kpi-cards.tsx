@@ -2,9 +2,9 @@ import type { KPIs } from "@/lib/queries";
 
 const cards: { key: keyof KPIs; label: string; suffix: string }[] = [
   { key: "totalUsers", label: "Total Users", suffix: "" },
+  { key: "activeUsers7d", label: "Active (7d)", suffix: "" },
   { key: "totalWorkouts", label: "Total Workouts", suffix: "" },
   { key: "avgDuration", label: "Avg Duration", suffix: " min" },
-  { key: "avgCalories", label: "Avg Calories", suffix: " kcal" },
 ];
 
 export function KPICards({ data }: { data: KPIs }) {

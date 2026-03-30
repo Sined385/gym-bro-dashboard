@@ -1,23 +1,26 @@
 import { NextResponse } from "next/server";
-import { getSupabase } from "@/lib/supabase";
+import { query, queryOne } from "@/lib/db";
 
 export async function GET() {
-  const supabase = getSupabase();
+  try {
+    const [users, workouts, events] = await Promise.all([
+      queryOne<{ count: string }>('SELECT count(*) FROM "User"'),
+      queryOne<{ count: string }>("SELECT count(*) FROM workout_sessions"),
+      queryOne<{ count: string }>("SELECT count(*) FROM analytics_events"),
+    ]);
 
-  const [users, workouts, events] = await Promise.all([
-    supabase.from("User").select("id", { count: "exact", head: true }),
-    supabase.from("workout_sessions").select("id").limit(5),
-    supabase.from("analytics_events").select("id").limit(5),
-  ]);
-
-  return NextResponse.json({
-    env: {
-      SUPABASE_URL: process.env.SUPABASE_URL ? "set" : "missing",
-      SUPABASE_SERVICE_ROLE_KEY: process.env.SUPABASE_SERVICE_ROLE_KEY ? "set" : "missing",
-      SUPABASE_KEY: process.env.SUPABASE_KEY ? "set" : "missing",
-    },
-    users: { data: users.data, count: users.count, error: users.error },
-    workouts: { data: workouts.data, error: workouts.error },
-    events: { data: events.data, error: events.error },
-  });
+    return NextResponse.json({
+      env: {
+        DATABASE_URL: process.env.DATABASE_URL ? "set" : "missing",
+      },
+      users: users?.count,
+      workouts: workouts?.count,
+      events: events?.count,
+    });
+  } catch (error) {
+    return NextResponse.json(
+      { error: String(error) },
+      { status: 500 }
+    );
+  }
 }

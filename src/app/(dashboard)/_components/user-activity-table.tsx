@@ -1,3 +1,4 @@
+import Link from "next/link";
 import type { UserActivity } from "@/lib/queries";
 
 function timeAgo(dateStr: string | null): string {
@@ -28,11 +29,13 @@ export function UserActivityTable({ users }: { users: UserActivity[] }) {
           </thead>
           <tbody className="divide-y divide-gray-800/50">
             {users.map((u) => (
-              <tr key={u.id} className="text-gray-300">
+              <tr key={u.id} className="text-gray-300 hover:bg-gray-800/50 cursor-pointer">
                 <td className="py-2.5 pr-4 font-medium">
-                  {u.full_name || (
-                    <span className="text-gray-600">—</span>
-                  )}
+                  <Link href={`/users/${u.id}`} className="hover:text-primary transition-colors">
+                    {u.full_name || (
+                      <span className="text-gray-600">—</span>
+                    )}
+                  </Link>
                 </td>
                 <td className="py-2.5 pr-4 text-xs text-gray-400">
                   {u.email}

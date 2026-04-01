@@ -29,18 +29,17 @@ function EventBadge({ name }: { name: string }) {
   );
 }
 
-export function RecentEventsTable({ events }: { events: RecentEvent[] }) {
+export function UserActivityTimeline({ events }: { events: RecentEvent[] }) {
   return (
     <div className="rounded-xl border border-gray-800 bg-gray-900 p-5">
       <h2 className="mb-4 text-sm font-medium text-gray-400">
-        Recent Events
+        Activity Timeline
       </h2>
       <div className="overflow-x-auto">
         <table className="w-full text-left text-sm">
           <thead>
             <tr className="border-b border-gray-800 text-xs uppercase text-gray-500">
               <th className="pb-3 pr-4">Event</th>
-              <th className="pb-3 pr-4">User</th>
               <th className="pb-3 pr-4">Details</th>
               <th className="pb-3">Timestamp</th>
             </tr>
@@ -50,18 +49,6 @@ export function RecentEventsTable({ events }: { events: RecentEvent[] }) {
               <tr key={e.id} className="text-gray-300">
                 <td className="py-2.5 pr-4">
                   <EventBadge name={e.event_name} />
-                </td>
-                <td className="py-2.5 pr-4">
-                  <div className="text-sm">
-                    {e.user_name || e.user_email || (
-                      <span className="font-mono text-xs text-gray-500">
-                        {e.user_id.slice(0, 8)}...
-                      </span>
-                    )}
-                  </div>
-                  {e.user_name && e.user_email && (
-                    <div className="text-xs text-gray-500">{e.user_email}</div>
-                  )}
                 </td>
                 <td className="max-w-xs truncate py-2.5 pr-4 font-mono text-xs text-gray-500">
                   {Object.keys(e.properties).length > 0
@@ -75,7 +62,7 @@ export function RecentEventsTable({ events }: { events: RecentEvent[] }) {
             ))}
             {events.length === 0 && (
               <tr>
-                <td colSpan={4} className="py-8 text-center text-gray-600">
+                <td colSpan={3} className="py-8 text-center text-gray-600">
                   No events yet
                 </td>
               </tr>

@@ -129,6 +129,210 @@ export async function getUserActivity(): Promise<UserActivity[]> {
   }));
 }
 
+// ── User Detail Queries ──────────────────────────────────
+
+export interface UserDetail {
+  id: string;
+  email: string;
+  full_name: string | null;
+  avatar_url: string | null;
+  username: string | null;
+  created_at: string;
+  primary_goals: string[] | null;
+  experience_level: string | null;
+  training_frequency: number | null;
+  available_equipment: string | null;
+}
+
+export interface UserKPIData {
+  workoutCount: number;
+  totalDurationMinutes: number;
+  avgDurationMinutes: number;
+  totalCalories: number;
+  coachMessages: number;
+  postCount: number;
+  likesReceived: number;
+  followerCount: number;
+}
+
+export interface UserWorkout {
+  id: string;
+  title: string;
+  type: string;
+  duration_minutes: number | null;
+  calories: number | null;
+  completed_at: string;
+}
+
+export interface UserCoachStatsData {
+  conversationCount: number;
+  userMessages: number;
+  aiMessages: number;
+  firstMessageAt: string | null;
+  lastMessageAt: string | null;
+}
+
+export interface UserPost {
+  id: string;
+  content: string;
+  like_count: number;
+  comment_count: number;
+  created_at: string;
+}
+
+export async function getUserDetail(id: string): Promise<UserDetail | null> {
+  return queryOne<UserDetail>(
+    `SELECT
+       u.id, u.email, u.full_name, u.avatar_url, u.username, u.created_at,
+       od.primary_goals, od.experience_level, od.training_frequency, od.available_equipment
+     FROM "User" u
+     LEFT JOIN onboarding_data od ON od.user_id = u.id
+     WHERE u.id = $1`,
+    [id]
+  );
+}
+
+export async function getUserKPIs(id: string): Promise<UserKPIData> {
+  const [workouts, coach, posts, likes, followers] = await Promise.all([
+    queryOne<{ count: string; total_dur: string; avg_dur: string; total_cal: string }>(
+      `SELECT count(*) as count,
+              coalesce(sum(duration_minutes), 0) as total_dur,
+              coalesce(avg(duration_minutes), 0) as avg_dur,
+              coalesce(sum(calories), 0) as total_cal
+       FROM workout_sessions WHERE user_id = $1 AND status = 'completed'`,
+      [id]
+    ),
+    queryOne<{ count: string }>(
+      `SELECT count(*) as count FROM coach_messages cm
+       JOIN coach_conversations cc ON cc.id = cm.conversation_id
+       WHERE cc.user_id = $1 AND cm.role = 'user'`,
+      [id]
+    ),
+    queryOne<{ count: string }>(
+      `SELECT count(*) as count FROM posts WHERE user_id = $1`,
+      [id]
+    ),
+    queryOne<{ count: string }>(
+      `SELECT count(*) as count FROM post_likes pl
+       JOIN posts p ON p.id = pl.post_id
+       WHERE p.user_id = $1`,
+      [id]
+    ),
+    queryOne<{ count: string }>(
+      `SELECT count(*) as count FROM follows WHERE following_id = $1`,
+      [id]
+    ),
+  ]);
+
+  return {
+    workoutCount: parseInt(workouts?.count ?? "0"),
+    totalDurationMinutes: parseInt(workouts?.total_dur ?? "0"),
+    avgDurationMinutes: Math.round(parseFloat(workouts?.avg_dur ?? "0")),
+    totalCalories: parseInt(workouts?.total_cal ?? "0"),
+    coachMessages: parseInt(coach?.count ?? "0"),
+    postCount: parseInt(posts?.count ?? "0"),
+    likesReceived: parseInt(likes?.count ?? "0"),
+    followerCount: parseInt(followers?.count ?? "0"),
+  };
+}
+
+export async function getUserWorkoutHistory(id: string, limit = 20): Promise<UserWorkout[]> {
+  return query<UserWorkout>(
+    `SELECT id, title, type, duration_minutes, calories, completed_at::text
+     FROM workout_sessions
+     WHERE user_id = $1 AND status = 'completed'
+     ORDER BY completed_at DESC
+     LIMIT $2`,
+    [id, limit]
+  );
+}
+
+export async function getUserWorkoutTrend(id: string, days = 30): Promise<TrendPoint[]> {
+  const rows = await query<{ date: string; count: string }>(
+    `SELECT completed_at::date::text as date, count(*) as count
+     FROM workout_sessions
+     WHERE user_id = $1 AND status = 'completed' AND completed_at >= now() - make_interval(days => $2)
+     GROUP BY completed_at::date
+     ORDER BY date`,
+    [id, days]
+  );
+
+  return fillGaps(
+    rows.map((r) => ({ date: r.date, count: parseInt(r.count) })),
+    days
+  );
+}
+
+export async function getUserCoachStats(id: string): Promise<UserCoachStatsData> {
+  const [convos, msgs] = await Promise.all([
+    queryOne<{ count: string }>(
+      `SELECT count(*) as count FROM coach_conversations WHERE user_id = $1`,
+      [id]
+    ),
+    queryOne<{ user_msgs: string; ai_msgs: string; first_at: string | null; last_at: string | null }>(
+      `SELECT
+         count(*) FILTER (WHERE cm.role = 'user') as user_msgs,
+         count(*) FILTER (WHERE cm.role = 'assistant') as ai_msgs,
+         min(cm.created_at)::text as first_at,
+         max(cm.created_at)::text as last_at
+       FROM coach_messages cm
+       JOIN coach_conversations cc ON cc.id = cm.conversation_id
+       WHERE cc.user_id = $1`,
+      [id]
+    ),
+  ]);
+
+  return {
+    conversationCount: parseInt(convos?.count ?? "0"),
+    userMessages: parseInt(msgs?.user_msgs ?? "0"),
+    aiMessages: parseInt(msgs?.ai_msgs ?? "0"),
+    firstMessageAt: msgs?.first_at ?? null,
+    lastMessageAt: msgs?.last_at ?? null,
+  };
+}
+
+export async function getUserPosts(id: string, limit = 10): Promise<UserPost[]> {
+  const rows = await query<{
+    id: string;
+    content: string;
+    like_count: string;
+    comment_count: string;
+    created_at: string;
+  }>(
+    `SELECT
+       p.id, p.content, p.created_at::text,
+       (SELECT count(*) FROM post_likes WHERE post_id = p.id)::text as like_count,
+       (SELECT count(*) FROM post_comments WHERE post_id = p.id)::text as comment_count
+     FROM posts p
+     WHERE p.user_id = $1
+     ORDER BY p.created_at DESC
+     LIMIT $2`,
+    [id, limit]
+  );
+
+  return rows.map((r) => ({
+    id: r.id,
+    content: r.content,
+    like_count: parseInt(r.like_count),
+    comment_count: parseInt(r.comment_count),
+    created_at: r.created_at,
+  }));
+}
+
+export async function getUserEvents(id: string, limit = 100): Promise<RecentEvent[]> {
+  return query<RecentEvent>(
+    `SELECT
+       ae.id, ae.user_id, ae.event_name, ae.properties, ae.created_at,
+       u.email as user_email, u.full_name as user_name
+     FROM analytics_events ae
+     LEFT JOIN "User" u ON u.id = ae.user_id
+     WHERE ae.user_id = $1
+     ORDER BY ae.created_at DESC
+     LIMIT $2`,
+    [id, limit]
+  );
+}
+
 export async function getRecentEvents(limit = 50): Promise<RecentEvent[]> {
   const rows = await query<{
     id: string;

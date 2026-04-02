@@ -37,7 +37,7 @@ export default async function UserDetailPage({
       getUserCoachStats(id),
       getUserPosts(id, 10),
       getUserEvents(id, 100),
-      getUserAiUsage(id),
+      getUserAiUsage(id).catch(() => []),
     ]);
 
   if (!user) {

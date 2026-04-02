@@ -325,7 +325,7 @@ export async function getUserEvents(id: string, limit = 100): Promise<RecentEven
        ae.id, ae.user_id, ae.event_name, ae.properties, ae.created_at,
        u.email as user_email, u.full_name as user_name
      FROM analytics_events ae
-     LEFT JOIN "User" u ON u.id = ae.user_id::uuid
+     LEFT JOIN "User" u ON u.id::text = ae.user_id
      WHERE ae.user_id = $1
      ORDER BY ae.created_at DESC
      LIMIT $2`,
@@ -347,7 +347,7 @@ export async function getRecentEvents(limit = 50): Promise<RecentEvent[]> {
        ae.id, ae.user_id, ae.event_name, ae.properties, ae.created_at,
        u.email as user_email, u.full_name as user_name
      FROM analytics_events ae
-     LEFT JOIN "User" u ON u.id = ae.user_id::uuid
+     LEFT JOIN "User" u ON u.id::text = ae.user_id
      ORDER BY ae.created_at DESC
      LIMIT $1`,
     [limit]
@@ -506,7 +506,7 @@ export async function getAiUsageByUser(limit = 50): Promise<AiUsageByUser[]> {
        sum(a.estimated_cost)::text as total_cost,
        (SELECT feature FROM ai_usage a2 WHERE a2.user_id = a.user_id GROUP BY feature ORDER BY count(*) DESC LIMIT 1) as top_feature
      FROM ai_usage a
-     JOIN "User" u ON u.id = a.user_id::uuid
+     JOIN "User" u ON u.id::text = a.user_id
      GROUP BY a.user_id, u.email, u.full_name
      ORDER BY sum(a.estimated_cost) DESC
      LIMIT $1`,

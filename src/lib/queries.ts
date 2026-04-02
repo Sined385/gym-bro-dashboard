@@ -325,7 +325,7 @@ export async function getUserEvents(id: string, limit = 100): Promise<RecentEven
        ae.id, ae.user_id, ae.event_name, ae.properties, ae.created_at,
        u.email as user_email, u.full_name as user_name
      FROM analytics_events ae
-     LEFT JOIN "User" u ON u.id = ae.user_id
+     LEFT JOIN "User" u ON u.id = ae.user_id::uuid
      WHERE ae.user_id = $1
      ORDER BY ae.created_at DESC
      LIMIT $2`,
@@ -347,11 +347,206 @@ export async function getRecentEvents(limit = 50): Promise<RecentEvent[]> {
        ae.id, ae.user_id, ae.event_name, ae.properties, ae.created_at,
        u.email as user_email, u.full_name as user_name
      FROM analytics_events ae
-     LEFT JOIN "User" u ON u.id = ae.user_id
+     LEFT JOIN "User" u ON u.id = ae.user_id::uuid
      ORDER BY ae.created_at DESC
      LIMIT $1`,
     [limit]
   );
 
   return rows;
+}
+
+// ── AI Usage Queries ──────────────────────────────────
+
+export interface AiUsageKPIs {
+  totalTokens: number;
+  totalCost: number;
+  totalCalls: number;
+  avgCostPerCall: number;
+  cost7d: number;
+  calls7d: number;
+}
+
+export interface AiUsageTrendPoint {
+  date: string;
+  cost: number;
+  tokens: number;
+}
+
+export interface AiUsageByFeature {
+  feature: string;
+  calls: number;
+  totalTokens: number;
+  totalCost: number;
+  avgCostPerCall: number;
+}
+
+export interface AiUsageByUser {
+  userId: string;
+  email: string;
+  fullName: string | null;
+  calls: number;
+  totalTokens: number;
+  totalCost: number;
+  topFeature: string | null;
+}
+
+export interface UserAiUsageRow {
+  feature: string;
+  calls: number;
+  totalTokens: number;
+  totalCost: number;
+}
+
+export async function getAiUsageKPIs(): Promise<AiUsageKPIs> {
+  const [allTime, last7d] = await Promise.all([
+    queryOne<{ total_tokens: string; total_cost: string; total_calls: string }>(
+      `SELECT
+         coalesce(sum(total_tokens), 0) as total_tokens,
+         coalesce(sum(estimated_cost), 0) as total_cost,
+         count(*) as total_calls
+       FROM ai_usage`
+    ),
+    queryOne<{ cost: string; calls: string }>(
+      `SELECT
+         coalesce(sum(estimated_cost), 0) as cost,
+         count(*) as calls
+       FROM ai_usage
+       WHERE created_at >= now() - interval '7 days'`
+    ),
+  ]);
+
+  const totalCalls = parseInt(allTime?.total_calls ?? "0");
+  const totalCost = parseFloat(allTime?.total_cost ?? "0");
+
+  return {
+    totalTokens: parseInt(allTime?.total_tokens ?? "0"),
+    totalCost,
+    totalCalls,
+    avgCostPerCall: totalCalls > 0 ? totalCost / totalCalls : 0,
+    cost7d: parseFloat(last7d?.cost ?? "0"),
+    calls7d: parseInt(last7d?.calls ?? "0"),
+  };
+}
+
+export async function getAiUsageTrend(days = 30): Promise<AiUsageTrendPoint[]> {
+  const rows = await query<{ date: string; cost: string; tokens: string }>(
+    `SELECT
+       created_at::date::text as date,
+       sum(estimated_cost)::text as cost,
+       sum(total_tokens)::text as tokens
+     FROM ai_usage
+     WHERE created_at >= now() - make_interval(days => $1)
+     GROUP BY created_at::date
+     ORDER BY date`,
+    [days]
+  );
+
+  const map = new Map(rows.map((r) => [r.date, { cost: parseFloat(r.cost), tokens: parseInt(r.tokens) }]));
+  const result: AiUsageTrendPoint[] = [];
+  const now = new Date();
+
+  for (let i = days - 1; i >= 0; i--) {
+    const d = new Date(now);
+    d.setDate(d.getDate() - i);
+    const key = d.toISOString().slice(0, 10);
+    const entry = map.get(key);
+    result.push({ date: key, cost: entry?.cost ?? 0, tokens: entry?.tokens ?? 0 });
+  }
+
+  return result;
+}
+
+export async function getAiUsageByFeature(): Promise<AiUsageByFeature[]> {
+  const rows = await query<{
+    feature: string;
+    calls: string;
+    total_tokens: string;
+    total_cost: string;
+  }>(
+    `SELECT
+       feature,
+       count(*) as calls,
+       sum(total_tokens)::text as total_tokens,
+       sum(estimated_cost)::text as total_cost
+     FROM ai_usage
+     GROUP BY feature
+     ORDER BY sum(estimated_cost) DESC`
+  );
+
+  return rows.map((r) => {
+    const calls = parseInt(r.calls);
+    const totalCost = parseFloat(r.total_cost);
+    return {
+      feature: r.feature,
+      calls,
+      totalTokens: parseInt(r.total_tokens),
+      totalCost,
+      avgCostPerCall: calls > 0 ? totalCost / calls : 0,
+    };
+  });
+}
+
+export async function getAiUsageByUser(limit = 50): Promise<AiUsageByUser[]> {
+  const rows = await query<{
+    user_id: string;
+    email: string;
+    full_name: string | null;
+    calls: string;
+    total_tokens: string;
+    total_cost: string;
+    top_feature: string | null;
+  }>(
+    `SELECT
+       a.user_id,
+       u.email,
+       u.full_name,
+       count(*)::text as calls,
+       sum(a.total_tokens)::text as total_tokens,
+       sum(a.estimated_cost)::text as total_cost,
+       (SELECT feature FROM ai_usage a2 WHERE a2.user_id = a.user_id GROUP BY feature ORDER BY count(*) DESC LIMIT 1) as top_feature
+     FROM ai_usage a
+     JOIN "User" u ON u.id = a.user_id::uuid
+     GROUP BY a.user_id, u.email, u.full_name
+     ORDER BY sum(a.estimated_cost) DESC
+     LIMIT $1`,
+    [limit]
+  );
+
+  return rows.map((r) => ({
+    userId: r.user_id,
+    email: r.email,
+    fullName: r.full_name,
+    calls: parseInt(r.calls),
+    totalTokens: parseInt(r.total_tokens),
+    totalCost: parseFloat(r.total_cost),
+    topFeature: r.top_feature,
+  }));
+}
+
+export async function getUserAiUsage(userId: string): Promise<UserAiUsageRow[]> {
+  const rows = await query<{
+    feature: string;
+    calls: string;
+    total_tokens: string;
+    total_cost: string;
+  }>(
+    `SELECT
+       feature,
+       count(*) as calls,
+       sum(total_tokens)::text as total_tokens,
+       sum(estimated_cost)::text as total_cost
+     FROM ai_usage
+     WHERE user_id = $1
+     GROUP BY feature
+     ORDER BY sum(estimated_cost) DESC`,
+    [userId]
+  );
+
+  return rows.map((r) => ({
+    feature: r.feature,
+    calls: parseInt(r.calls),
+    totalTokens: parseInt(r.total_tokens),
+    totalCost: parseFloat(r.total_cost),
+  }));
 }

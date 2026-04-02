@@ -8,6 +8,7 @@ import {
   getUserCoachStats,
   getUserPosts,
   getUserEvents,
+  getUserAiUsage,
 } from "@/lib/queries";
 import { UserProfileHeader } from "./_components/user-profile-header";
 import { UserKPICards } from "./_components/user-kpi-cards";
@@ -16,6 +17,7 @@ import { UserCoachStats } from "./_components/user-coach-stats";
 import { UserWorkoutHistory } from "./_components/user-workout-history";
 import { UserPostsList } from "./_components/user-posts-list";
 import { UserActivityTimeline } from "./_components/user-activity-timeline";
+import { UserAiUsage } from "./_components/user-ai-usage";
 
 export const dynamic = "force-dynamic";
 
@@ -26,7 +28,7 @@ export default async function UserDetailPage({
 }) {
   const { id } = await params;
 
-  const [user, kpis, workouts, trend, coachStats, posts, events] =
+  const [user, kpis, workouts, trend, coachStats, posts, events, aiUsage] =
     await Promise.all([
       getUserDetail(id),
       getUserKPIs(id),
@@ -35,6 +37,7 @@ export default async function UserDetailPage({
       getUserCoachStats(id),
       getUserPosts(id, 10),
       getUserEvents(id, 100),
+      getUserAiUsage(id),
     ]);
 
   if (!user) {
@@ -58,6 +61,8 @@ export default async function UserDetailPage({
         <UserWorkoutChart data={trend} />
         <UserCoachStats data={coachStats} />
       </div>
+
+      <UserAiUsage data={aiUsage} />
 
       <div className="grid gap-6 md:grid-cols-2">
         <UserWorkoutHistory workouts={workouts} />

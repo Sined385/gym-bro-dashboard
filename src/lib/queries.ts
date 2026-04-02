@@ -114,7 +114,7 @@ export async function getUserActivity(): Promise<UserActivity[]> {
        count(ws.id)::text as workout_count,
        max(ws.completed_at)::text as last_active
      FROM "User" u
-     LEFT JOIN workout_sessions ws ON ws.user_id = u.id AND ws.status = 'completed'
+     LEFT JOIN workout_sessions ws ON ws.user_id = u.id::text AND ws.status = 'completed'
      GROUP BY u.id
      ORDER BY u.created_at DESC`
   );
@@ -186,7 +186,7 @@ export async function getUserDetail(id: string): Promise<UserDetail | null> {
        u.id, u.email, u.full_name, u.avatar_url, u.username, u.created_at,
        od.primary_goals, od.experience_level, od.training_frequency, od.available_equipment
      FROM "User" u
-     LEFT JOIN onboarding_data od ON od.user_id = u.id
+     LEFT JOIN onboarding_data od ON od.user_id = u.id::text
      WHERE u.id = $1`,
     [id]
   );

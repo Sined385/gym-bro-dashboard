@@ -550,3 +550,120 @@ export async function getUserAiUsage(userId: string): Promise<UserAiUsageRow[]> 
     totalCost: parseFloat(r.total_cost),
   }));
 }
+
+// ── Feature Usage Queries ──────────────────────────────────
+
+export interface FeatureUsageKPIs {
+  totalEvents: number;
+  uniqueUsers: number;
+  events7d: number;
+  uniqueUsers7d: number;
+}
+
+export interface EventBreakdown {
+  eventName: string;
+  count: number;
+  uniqueUsers: number;
+  last7d: number;
+}
+
+export interface CategoryBreakdown {
+  category: string;
+  totalEvents: number;
+  uniqueUsers: number;
+}
+
+const EVENT_CATEGORY_CASE = `
+  CASE
+    WHEN event_name IN ('calendar_expanded','calendar_collapsed','calendar_day_changed') THEN 'Calendar'
+    WHEN event_name IN ('custom_workout_screen_opened','exercise_added','workout_cancelled','workout_completed','session_collapsed','custom_exercise_created','superset_created','proposed_workout_started','planned_workout_started','coach_workout_started') THEN 'Workout'
+    WHEN event_name IN ('post_shared_after_workout','workout_shared_as_post','workout_shared_as_link','exercise_shared_as_link','post_shared') THEN 'Sharing'
+    WHEN event_name IN ('post_created','post_liked','post_commented','post_opened') THEN 'Community'
+    WHEN event_name IN ('coach_tool_used','coach_quick_action') THEN 'Coach'
+    WHEN event_name IN ('plan_opened','exercise_preview_opened') THEN 'Plan'
+    WHEN event_name IN ('profile_opened','profile_time_spent') THEN 'Profile'
+    WHEN event_name IN ('notifications_opened') THEN 'Notifications'
+    ELSE 'Other'
+  END`;
+
+export async function getFeatureUsageKPIs(): Promise<FeatureUsageKPIs> {
+  const [allTime, last7d] = await Promise.all([
+    queryOne<{ total_events: string; unique_users: string }>(
+      `SELECT count(*) as total_events, count(DISTINCT user_id) as unique_users FROM analytics_events`
+    ),
+    queryOne<{ events: string; users: string }>(
+      `SELECT count(*) as events, count(DISTINCT user_id) as users
+       FROM analytics_events WHERE created_at >= now() - interval '7 days'`
+    ),
+  ]);
+
+  return {
+    totalEvents: parseInt(allTime?.total_events ?? "0"),
+    uniqueUsers: parseInt(allTime?.unique_users ?? "0"),
+    events7d: parseInt(last7d?.events ?? "0"),
+    uniqueUsers7d: parseInt(last7d?.users ?? "0"),
+  };
+}
+
+export async function getEventBreakdown(): Promise<EventBreakdown[]> {
+  const rows = await query<{
+    event_name: string;
+    count: string;
+    unique_users: string;
+    last_7d: string;
+  }>(
+    `SELECT
+       event_name,
+       count(*) as count,
+       count(DISTINCT user_id) as unique_users,
+       count(*) FILTER (WHERE created_at >= now() - interval '7 days') as last_7d
+     FROM analytics_events
+     GROUP BY event_name
+     ORDER BY count(*) DESC`
+  );
+
+  return rows.map((r) => ({
+    eventName: r.event_name,
+    count: parseInt(r.count),
+    uniqueUsers: parseInt(r.unique_users),
+    last7d: parseInt(r.last_7d),
+  }));
+}
+
+export async function getFeatureUsageTrend(days = 30): Promise<TrendPoint[]> {
+  const rows = await query<{ date: string; count: string }>(
+    `SELECT created_at::date::text as date, count(*) as count
+     FROM analytics_events
+     WHERE created_at >= now() - make_interval(days => $1)
+     GROUP BY created_at::date
+     ORDER BY date`,
+    [days]
+  );
+
+  return fillGaps(
+    rows.map((r) => ({ date: r.date, count: parseInt(r.count) })),
+    days
+  );
+}
+
+export async function getCategoryBreakdown(): Promise<CategoryBreakdown[]> {
+  const rows = await query<{
+    category: string;
+    total_events: string;
+    unique_users: string;
+  }>(
+    `SELECT
+       ${EVENT_CATEGORY_CASE} as category,
+       count(*) as total_events,
+       count(DISTINCT user_id) as unique_users
+     FROM analytics_events
+     GROUP BY category
+     ORDER BY count(*) DESC`
+  );
+
+  return rows.map((r) => ({
+    category: r.category,
+    totalEvents: parseInt(r.total_events),
+    uniqueUsers: parseInt(r.unique_users),
+  }));
+}

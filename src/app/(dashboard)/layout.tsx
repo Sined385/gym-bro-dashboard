@@ -28,6 +28,12 @@ export default function DashboardLayout({
               >
                 AI Usage
               </Link>
+              <Link
+                href="/feature-usage"
+                className="text-gray-400 transition-colors hover:text-gray-200"
+              >
+                Feature Usage
+              </Link>
             </nav>
           </div>
           <div className="flex items-center gap-3">

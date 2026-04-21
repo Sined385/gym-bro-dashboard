@@ -607,6 +607,51 @@ export async function getUserAiUsage(userId: string): Promise<UserAiUsageRow[]> 
   }));
 }
 
+// ── Support Queries ──────────────────────────────────
+
+export interface SupportRequest {
+  id: string;
+  name: string;
+  email: string;
+  category: string;
+  message: string;
+  created_at: string;
+}
+
+export interface SupportKPIs {
+  total: number;
+  last7d: number;
+  today: number;
+}
+
+export async function getSupportKPIs(): Promise<SupportKPIs> {
+  const [total, last7d, today] = await Promise.all([
+    queryOne<{ count: string }>(`SELECT count(*) FROM support_requests`),
+    queryOne<{ count: string }>(
+      `SELECT count(*) FROM support_requests WHERE created_at >= now() - interval '7 days'`
+    ),
+    queryOne<{ count: string }>(
+      `SELECT count(*) FROM support_requests WHERE created_at::date = now()::date`
+    ),
+  ]);
+
+  return {
+    total: parseInt(total?.count ?? "0"),
+    last7d: parseInt(last7d?.count ?? "0"),
+    today: parseInt(today?.count ?? "0"),
+  };
+}
+
+export async function getSupportRequests(limit = 100): Promise<SupportRequest[]> {
+  return query<SupportRequest>(
+    `SELECT id, name, email, category, message, created_at::text
+     FROM support_requests
+     ORDER BY created_at DESC
+     LIMIT $1`,
+    [limit]
+  );
+}
+
 // ── Feature Usage Queries ──────────────────────────────────
 
 export interface FeatureUsageKPIs {

@@ -9,8 +9,10 @@ import {
   getUserPosts,
   getUserEvents,
   getUserAiUsage,
+  getUserSubscription,
 } from "@/lib/queries";
 import { UserProfileHeader } from "./_components/user-profile-header";
+import { UserSubscription } from "./_components/user-subscription";
 import { UserKPICards } from "./_components/user-kpi-cards";
 import { UserWorkoutChart } from "./_components/user-workout-chart";
 import { UserCoachStats } from "./_components/user-coach-stats";
@@ -28,9 +30,10 @@ export default async function UserDetailPage({
 }) {
   const { id } = await params;
 
-  const [user, kpis, workouts, trend, coachStats, posts, events, aiUsage] =
+  const [user, subscription, kpis, workouts, trend, coachStats, posts, events, aiUsage] =
     await Promise.all([
       getUserDetail(id),
+      getUserSubscription(id),
       getUserKPIs(id),
       getUserWorkoutHistory(id, 20),
       getUserWorkoutTrend(id, 30),
@@ -54,6 +57,16 @@ export default async function UserDetailPage({
       </Link>
 
       <UserProfileHeader user={user} />
+
+      <UserSubscription
+        userId={id}
+        isPremium={subscription.isPremium}
+        premiumSource={subscription.premiumSource}
+        premiumGrantedAt={subscription.premiumGrantedAt}
+        premiumExpiresAt={subscription.premiumExpiresAt}
+        storekitProductId={subscription.storekitProductId}
+        coachMessagesUsed={subscription.coachMessagesUsed}
+      />
 
       <UserKPICards data={kpis} />
 

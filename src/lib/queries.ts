@@ -5,6 +5,8 @@ export interface KPIs {
   totalWorkouts: number;
   avgDuration: number;
   activeUsers7d: number;
+  totalPremium: number;
+  premiumRate: number;
 }
 
 export interface TrendPoint {
@@ -19,6 +21,7 @@ export interface UserActivity {
   created_at: string;
   workout_count: number;
   last_active: string | null;
+  is_premium: boolean;
 }
 
 export interface RecentEvent {
@@ -47,7 +50,7 @@ function fillGaps(data: { date: string; count: number }[], days: number): TrendP
 }
 
 export async function getKPIs(): Promise<KPIs> {
-  const [users, workouts, active] = await Promise.all([
+  const [users, workouts, active, premium] = await Promise.all([
     queryOne<{ count: string }>('SELECT count(*) FROM "User"'),
     queryOne<{ count: string; avg_dur: string }>(
       `SELECT count(*) as count, coalesce(avg(duration_minutes), 0) as avg_dur
@@ -58,13 +61,21 @@ export async function getKPIs(): Promise<KPIs> {
        FROM workout_sessions
        WHERE status = 'completed' AND completed_at >= now() - interval '7 days'`
     ),
+    queryOne<{ count: string }>(
+      `SELECT count(*) as count FROM "User" WHERE is_premium = true`
+    ),
   ]);
 
+  const totalUsers = parseInt(users?.count ?? "0");
+  const totalPremium = parseInt(premium?.count ?? "0");
+
   return {
-    totalUsers: parseInt(users?.count ?? "0"),
+    totalUsers,
     totalWorkouts: parseInt(workouts?.count ?? "0"),
     avgDuration: Math.round(parseFloat(workouts?.avg_dur ?? "0")),
     activeUsers7d: parseInt(active?.count ?? "0"),
+    totalPremium,
+    premiumRate: totalUsers > 0 ? Math.round((totalPremium / totalUsers) * 100) : 0,
   };
 }
 
@@ -108,13 +119,14 @@ export async function getUserActivity(): Promise<UserActivity[]> {
     created_at: string;
     workout_count: string;
     last_active: string | null;
+    is_premium: boolean;
   }>(
     `SELECT
-       u.id, u.email, u.full_name, u.created_at,
+       u.id, u.email, u.full_name, u.created_at, u.is_premium,
        count(ws.id)::text as workout_count,
        max(ws.completed_at)::text as last_active
      FROM "User" u
-     LEFT JOIN workout_sessions ws ON ws.user_id = u.id::text AND ws.status = 'completed'
+     LEFT JOIN workout_sessions ws ON ws.user_id = u.id AND ws.status = 'completed'
      GROUP BY u.id
      ORDER BY u.created_at DESC`
   );
@@ -126,10 +138,20 @@ export async function getUserActivity(): Promise<UserActivity[]> {
     created_at: r.created_at,
     workout_count: parseInt(r.workout_count),
     last_active: r.last_active,
+    is_premium: r.is_premium,
   }));
 }
 
 // ── User Detail Queries ──────────────────────────────────
+
+export interface UserSubscriptionDetail {
+  isPremium: boolean;
+  premiumSource: string | null;
+  premiumGrantedAt: string | null;
+  premiumExpiresAt: string | null;
+  storekitProductId: string | null;
+  coachMessagesUsed: number;
+}
 
 export interface UserDetail {
   id: string;
@@ -186,10 +208,44 @@ export async function getUserDetail(id: string): Promise<UserDetail | null> {
        u.id, u.email, u.full_name, u.avatar_url, u.username, u.created_at,
        od.primary_goals, od.experience_level, od.training_frequency, od.available_equipment
      FROM "User" u
-     LEFT JOIN onboarding_data od ON od.user_id = u.id::text
+     LEFT JOIN onboarding_data od ON od.user_id = u.id
      WHERE u.id = $1`,
     [id]
   );
+}
+
+export async function getUserSubscription(
+  id: string
+): Promise<UserSubscriptionDetail> {
+  const [user, coach] = await Promise.all([
+    queryOne<{
+      is_premium: boolean;
+      premium_source: string | null;
+      premium_granted_at: string | null;
+      premium_expires_at: string | null;
+      storekit_product_id: string | null;
+    }>(
+      `SELECT is_premium, premium_source, premium_granted_at::text,
+              premium_expires_at::text, storekit_product_id
+       FROM "User" WHERE id = $1`,
+      [id]
+    ),
+    queryOne<{ count: string }>(
+      `SELECT count(*) as count FROM coach_messages cm
+       JOIN coach_conversations cc ON cc.id = cm.conversation_id
+       WHERE cc.user_id = $1 AND cm.role = 'user'`,
+      [id]
+    ),
+  ]);
+
+  return {
+    isPremium: user?.is_premium ?? false,
+    premiumSource: user?.premium_source ?? null,
+    premiumGrantedAt: user?.premium_granted_at ?? null,
+    premiumExpiresAt: user?.premium_expires_at ?? null,
+    storekitProductId: user?.storekit_product_id ?? null,
+    coachMessagesUsed: parseInt(coach?.count ?? "0"),
+  };
 }
 
 export async function getUserKPIs(id: string): Promise<UserKPIData> {

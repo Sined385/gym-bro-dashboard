@@ -31,9 +31,14 @@ export function UserActivityTable({ users }: { users: UserActivity[] }) {
             {users.map((u) => (
               <tr key={u.id} className="text-gray-300 hover:bg-gray-800/50 cursor-pointer">
                 <td className="py-2.5 pr-4 font-medium">
-                  <Link href={`/users/${u.id}`} className="hover:text-primary transition-colors">
+                  <Link href={`/users/${u.id}`} className="hover:text-primary transition-colors inline-flex items-center gap-1.5">
                     {u.full_name || (
                       <span className="text-gray-600">—</span>
+                    )}
+                    {u.is_premium && (
+                      <span className="inline-flex items-center rounded bg-primary/15 px-1.5 py-0.5 text-[10px] font-bold text-primary">
+                        PRO
+                      </span>
                     )}
                   </Link>
                 </td>

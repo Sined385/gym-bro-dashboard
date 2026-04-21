@@ -5,6 +5,8 @@ const cards: { key: keyof KPIs; label: string; suffix: string }[] = [
   { key: "activeUsers7d", label: "Active (7d)", suffix: "" },
   { key: "totalWorkouts", label: "Total Workouts", suffix: "" },
   { key: "avgDuration", label: "Avg Duration", suffix: " min" },
+  { key: "totalPremium", label: "Premium Users", suffix: "" },
+  { key: "premiumRate", label: "Premium %", suffix: "%" },
 ];
 
 export function KPICards({ data }: { data: KPIs }) {

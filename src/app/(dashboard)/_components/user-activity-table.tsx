@@ -1,5 +1,6 @@
 import Link from "next/link";
 import type { UserActivity } from "@/lib/queries";
+import { UserSearch } from "./user-search";
 
 function timeAgo(dateStr: string | null): string {
   if (!dateStr) return "Never";
@@ -12,10 +13,13 @@ function timeAgo(dateStr: string | null): string {
   return `${days}d ago`;
 }
 
-export function UserActivityTable({ users }: { users: UserActivity[] }) {
+export function UserActivityTable({ users, search }: { users: UserActivity[]; search?: string }) {
   return (
     <div className="rounded-xl border border-gray-800 bg-gray-900 p-5">
-      <h2 className="mb-4 text-sm font-medium text-gray-400">Users</h2>
+      <div className="mb-4 flex items-center justify-between gap-4">
+        <h2 className="text-sm font-medium text-gray-400">Users</h2>
+        <UserSearch defaultValue={search} />
+      </div>
       <div className="overflow-x-auto">
         <table className="w-full text-left text-sm">
           <thead>

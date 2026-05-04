@@ -13,12 +13,17 @@ import { RecentEventsTable } from "./_components/recent-events-table";
 
 export const dynamic = "force-dynamic";
 
-export default async function DashboardPage() {
+export default async function DashboardPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ q?: string }>;
+}) {
+  const { q } = await searchParams;
   const [kpis, registrations, workouts, users, events] = await Promise.all([
     getKPIs(),
     getRegistrationTrend(30),
     getWorkoutTrend(30),
-    getUserActivity(),
+    getUserActivity(q),
     getRecentEvents(50),
   ]);
 
@@ -31,7 +36,7 @@ export default async function DashboardPage() {
         <WorkoutChart data={workouts} />
       </div>
 
-      <UserActivityTable users={users} />
+      <UserActivityTable users={users} search={q} />
 
       <RecentEventsTable events={events} />
     </div>

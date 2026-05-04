@@ -111,7 +111,12 @@ export async function getWorkoutTrend(days = 30): Promise<TrendPoint[]> {
   );
 }
 
-export async function getUserActivity(): Promise<UserActivity[]> {
+export async function getUserActivity(
+  search?: string
+): Promise<UserActivity[]> {
+  const hasSearch = search && search.trim().length > 0;
+  const searchPattern = hasSearch ? `%${search.trim()}%` : null;
+
   const rows = await query<{
     id: string;
     email: string;
@@ -127,8 +132,10 @@ export async function getUserActivity(): Promise<UserActivity[]> {
        max(ws.completed_at)::text as last_active
      FROM "User" u
      LEFT JOIN workout_sessions ws ON ws.user_id = u.id AND ws.status = 'completed'
+     ${hasSearch ? `WHERE (u.full_name ILIKE $1 OR u.email ILIKE $1 OR u.username ILIKE $1)` : ""}
      GROUP BY u.id
-     ORDER BY u.created_at DESC`
+     ORDER BY u.created_at DESC`,
+    hasSearch ? [searchPattern] : undefined
   );
 
   return rows.map((r) => ({

@@ -25,6 +25,7 @@ export function UserActivityTable({ users, search }: { users: UserActivity[]; se
           <thead>
             <tr className="border-b border-gray-800 text-xs uppercase text-gray-500">
               <th className="pb-3 pr-4">User</th>
+              <th className="pb-3 pr-4">Username</th>
               <th className="pb-3 pr-4">Email</th>
               <th className="pb-3 pr-4 text-right">Workouts</th>
               <th className="pb-3 pr-4">Last Active</th>
@@ -40,11 +41,31 @@ export function UserActivityTable({ users, search }: { users: UserActivity[]; se
                       <span className="text-gray-600">—</span>
                     )}
                     {u.is_premium && (
-                      <span className="inline-flex items-center rounded bg-primary/15 px-1.5 py-0.5 text-[10px] font-bold text-primary">
-                        PRO
+                      <span
+                        className={`inline-flex items-center rounded px-1.5 py-0.5 text-[10px] font-bold ${
+                          u.premium_source === "admin"
+                            ? "bg-amber-500/15 text-amber-400"
+                            : "bg-primary/15 text-primary"
+                        }`}
+                        title={
+                          u.premium_source === "admin"
+                            ? "Granted by admin"
+                            : u.premium_source === "storekit"
+                              ? "Organic purchase"
+                              : "Premium"
+                        }
+                      >
+                        {u.premium_source === "admin" ? "PRO·ADMIN" : "PRO"}
                       </span>
                     )}
                   </Link>
+                </td>
+                <td className="py-2.5 pr-4 text-xs text-gray-400">
+                  {u.username ? (
+                    <span className="font-mono">@{u.username}</span>
+                  ) : (
+                    <span className="text-gray-600">—</span>
+                  )}
                 </td>
                 <td className="py-2.5 pr-4 text-xs text-gray-400">
                   {u.email}
@@ -66,7 +87,7 @@ export function UserActivityTable({ users, search }: { users: UserActivity[]; se
             ))}
             {users.length === 0 && (
               <tr>
-                <td colSpan={5} className="py-8 text-center text-gray-600">
+                <td colSpan={6} className="py-8 text-center text-gray-600">
                   No users yet
                 </td>
               </tr>

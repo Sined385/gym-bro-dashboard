@@ -3,9 +3,10 @@ import { query, queryOne } from "./db";
 export interface KPIs {
   totalUsers: number;
   totalWorkouts: number;
-  avgDuration: number;
-  activeUsers7d: number;
-  totalPremium: number;
+  activeWorkout7d: number;
+  activeApp7d: number;
+  premiumOrganic: number;
+  premiumAdmin: number;
   premiumRate: number;
 }
 
@@ -18,10 +19,12 @@ export interface UserActivity {
   id: string;
   email: string;
   full_name: string | null;
+  username: string | null;
   created_at: string;
   workout_count: number;
   last_active: string | null;
   is_premium: boolean;
+  premium_source: string | null;
 }
 
 export interface RecentEvent {
@@ -50,10 +53,10 @@ function fillGaps(data: { date: string; count: number }[], days: number): TrendP
 }
 
 export async function getKPIs(): Promise<KPIs> {
-  const [users, workouts, active, premium] = await Promise.all([
+  const [users, workouts, activeWorkout, activeApp, premium] = await Promise.all([
     queryOne<{ count: string }>('SELECT count(*) FROM "User"'),
-    queryOne<{ count: string; avg_dur: string }>(
-      `SELECT count(*) as count, coalesce(avg(duration_minutes), 0) as avg_dur
+    queryOne<{ count: string }>(
+      `SELECT count(*) as count
        FROM workout_sessions WHERE status = 'completed'`
     ),
     queryOne<{ count: string }>(
@@ -62,28 +65,38 @@ export async function getKPIs(): Promise<KPIs> {
        WHERE status = 'completed' AND completed_at >= now() - interval '7 days'`
     ),
     queryOne<{ count: string }>(
-      `SELECT count(*) as count FROM "User" WHERE is_premium = true`
+      `SELECT count(DISTINCT user_id) as count
+       FROM analytics_events
+       WHERE created_at >= now() - interval '7 days'`
+    ),
+    queryOne<{ organic: string; admin: string }>(
+      `SELECT
+         count(*) FILTER (WHERE premium_source = 'storekit') as organic,
+         count(*) FILTER (WHERE premium_source = 'admin') as admin
+       FROM "User" WHERE is_premium = true`
     ),
   ]);
 
   const totalUsers = parseInt(users?.count ?? "0");
-  const totalPremium = parseInt(premium?.count ?? "0");
+  const premiumOrganic = parseInt(premium?.organic ?? "0");
+  const premiumAdmin = parseInt(premium?.admin ?? "0");
 
   return {
     totalUsers,
     totalWorkouts: parseInt(workouts?.count ?? "0"),
-    avgDuration: Math.round(parseFloat(workouts?.avg_dur ?? "0")),
-    activeUsers7d: parseInt(active?.count ?? "0"),
-    totalPremium,
-    premiumRate: totalUsers > 0 ? Math.round((totalPremium / totalUsers) * 100) : 0,
+    activeWorkout7d: parseInt(activeWorkout?.count ?? "0"),
+    activeApp7d: parseInt(activeApp?.count ?? "0"),
+    premiumOrganic,
+    premiumAdmin,
+    premiumRate: totalUsers > 0 ? Math.round((premiumOrganic / totalUsers) * 100) : 0,
   };
 }
 
 export async function getRegistrationTrend(days = 30): Promise<TrendPoint[]> {
   const rows = await query<{ date: string; count: string }>(
     `SELECT created_at::date::text as date, count(*) as count
-     FROM analytics_events
-     WHERE event_name = 'user_registered' AND created_at >= now() - make_interval(days => $1)
+     FROM "User"
+     WHERE created_at >= now() - make_interval(days => $1)
      GROUP BY created_at::date
      ORDER BY date`,
     [days]
@@ -121,13 +134,15 @@ export async function getUserActivity(
     id: string;
     email: string;
     full_name: string | null;
+    username: string | null;
     created_at: string;
     workout_count: string;
     last_active: string | null;
     is_premium: boolean;
+    premium_source: string | null;
   }>(
     `SELECT
-       u.id, u.email, u.full_name, u.created_at, u.is_premium,
+       u.id, u.email, u.full_name, u.username, u.created_at, u.is_premium, u.premium_source,
        count(ws.id)::text as workout_count,
        max(ws.completed_at)::text as last_active
      FROM "User" u
@@ -142,10 +157,12 @@ export async function getUserActivity(
     id: r.id,
     email: r.email,
     full_name: r.full_name,
+    username: r.username,
     created_at: r.created_at,
     workout_count: parseInt(r.workout_count),
     last_active: r.last_active,
     is_premium: r.is_premium,
+    premium_source: r.premium_source,
   }));
 }
 

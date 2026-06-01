@@ -2,10 +2,11 @@ import type { KPIs } from "@/lib/queries";
 
 const cards: { key: keyof KPIs; label: string; suffix: string }[] = [
   { key: "totalUsers", label: "Total Users", suffix: "" },
-  { key: "activeUsers7d", label: "Active (7d)", suffix: "" },
+  { key: "activeWorkout7d", label: "Active Workout (7d)", suffix: "" },
+  { key: "activeApp7d", label: "Active App (7d)", suffix: "" },
   { key: "totalWorkouts", label: "Total Workouts", suffix: "" },
-  { key: "avgDuration", label: "Avg Duration", suffix: " min" },
-  { key: "totalPremium", label: "Premium Users", suffix: "" },
+  { key: "premiumOrganic", label: "Premium (Organic)", suffix: "" },
+  { key: "premiumAdmin", label: "Premium (Admin)", suffix: "" },
   { key: "premiumRate", label: "Premium %", suffix: "%" },
 ];
 

@@ -1,6 +1,7 @@
 import Link from "next/link";
 import type { UserActivity } from "@/lib/queries";
 import { UserSearch } from "./user-search";
+import { CopyableId } from "./copyable-id";
 
 function timeAgo(dateStr: string | null): string {
   if (!dateStr) return "Never";
@@ -25,6 +26,7 @@ export function UserActivityTable({ users, search }: { users: UserActivity[]; se
           <thead>
             <tr className="border-b border-gray-800 text-xs uppercase text-gray-500">
               <th className="pb-3 pr-4">User</th>
+              <th className="pb-3 pr-4">ID</th>
               <th className="pb-3 pr-4">Username</th>
               <th className="pb-3 pr-4">Email</th>
               <th className="pb-3 pr-4 text-right">Workouts</th>
@@ -60,6 +62,9 @@ export function UserActivityTable({ users, search }: { users: UserActivity[]; se
                     )}
                   </Link>
                 </td>
+                <td className="py-2.5 pr-4">
+                  <CopyableId id={u.id} truncate label="User ID" />
+                </td>
                 <td className="py-2.5 pr-4 text-xs text-gray-400">
                   {u.username ? (
                     <span className="font-mono">@{u.username}</span>
@@ -87,7 +92,7 @@ export function UserActivityTable({ users, search }: { users: UserActivity[]; se
             ))}
             {users.length === 0 && (
               <tr>
-                <td colSpan={6} className="py-8 text-center text-gray-600">
+                <td colSpan={7} className="py-8 text-center text-gray-600">
                   No users yet
                 </td>
               </tr>

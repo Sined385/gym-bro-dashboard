@@ -1,4 +1,5 @@
 import type { UserDetail } from "@/lib/queries";
+import { CopyableId } from "../../../_components/copyable-id";
 
 export function UserProfileHeader({ user }: { user: UserDetail }) {
   const initials = user.full_name
@@ -26,6 +27,9 @@ export function UserProfileHeader({ user }: { user: UserDetail }) {
         {user.username && (
           <p className="text-xs text-gray-500">@{user.username}</p>
         )}
+        <div className="mt-2">
+          <CopyableId id={user.id} label="User ID" />
+        </div>
       </div>
       <div className="text-right text-xs text-gray-500">
         <p>Joined {new Date(user.created_at).toLocaleDateString()}</p>

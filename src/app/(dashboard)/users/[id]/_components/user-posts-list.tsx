@@ -14,7 +14,7 @@ export function UserPostsList({ posts }: { posts: UserPost[] }) {
           >
             <p className="line-clamp-2 text-sm text-gray-300">{p.content}</p>
             <div className="mt-2 flex items-center gap-4 text-xs text-gray-500">
-              <span>{p.like_count} likes</span>
+              <span>{p.reaction_count} reactions</span>
               <span>{p.comment_count} comments</span>
               <span className="ml-auto">
                 {new Date(p.created_at).toLocaleDateString()}

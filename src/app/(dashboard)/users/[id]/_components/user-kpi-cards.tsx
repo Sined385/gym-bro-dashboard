@@ -7,7 +7,7 @@ const cards: { key: keyof UserKPIData; label: string; format: (v: number) => str
   { key: "totalCalories", label: "Calories", format: (v) => v.toLocaleString() },
   { key: "coachMessages", label: "Coach Messages", format: (v) => v.toLocaleString() },
   { key: "postCount", label: "Posts", format: (v) => v.toLocaleString() },
-  { key: "likesReceived", label: "Likes Received", format: (v) => v.toLocaleString() },
+  { key: "reactionsReceived", label: "Reactions", format: (v) => v.toLocaleString() },
   { key: "followerCount", label: "Followers", format: (v) => v.toLocaleString() },
 ];
 

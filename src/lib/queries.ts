@@ -197,7 +197,7 @@ export interface UserKPIData {
   totalCalories: number;
   coachMessages: number;
   postCount: number;
-  likesReceived: number;
+  reactionsReceived: number;
   followerCount: number;
 }
 
@@ -221,7 +221,7 @@ export interface UserCoachStatsData {
 export interface UserPost {
   id: string;
   content: string;
-  like_count: number;
+  reaction_count: number;
   comment_count: number;
   created_at: string;
 }
@@ -311,7 +311,7 @@ export async function getUserKPIs(id: string): Promise<UserKPIData> {
     totalCalories: parseInt(workouts?.total_cal ?? "0"),
     coachMessages: parseInt(coach?.count ?? "0"),
     postCount: parseInt(posts?.count ?? "0"),
-    likesReceived: parseInt(likes?.count ?? "0"),
+    reactionsReceived: parseInt(likes?.count ?? "0"),
     followerCount: parseInt(followers?.count ?? "0"),
   };
 }
@@ -375,13 +375,13 @@ export async function getUserPosts(id: string, limit = 10): Promise<UserPost[]> 
   const rows = await query<{
     id: string;
     content: string;
-    like_count: string;
+    reaction_count: string;
     comment_count: string;
     created_at: string;
   }>(
     `SELECT
        p.id, p.content, p.created_at::text,
-       (SELECT count(*) FROM post_likes WHERE post_id = p.id)::text as like_count,
+       (SELECT count(*) FROM post_likes WHERE post_id = p.id)::text as reaction_count,
        (SELECT count(*) FROM post_comments WHERE post_id = p.id)::text as comment_count
      FROM posts p
      WHERE p.user_id = $1
@@ -393,7 +393,7 @@ export async function getUserPosts(id: string, limit = 10): Promise<UserPost[]> 
   return rows.map((r) => ({
     id: r.id,
     content: r.content,
-    like_count: parseInt(r.like_count),
+    reaction_count: parseInt(r.reaction_count),
     comment_count: parseInt(r.comment_count),
     created_at: r.created_at,
   }));

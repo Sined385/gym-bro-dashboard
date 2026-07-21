@@ -238,6 +238,26 @@ export async function getUserDetail(id: string): Promise<UserDetail | null> {
   );
 }
 
+export interface UserDeviceToken {
+  id: string;
+  token: string;
+  platform: string | null;
+  is_active: boolean;
+  updated_at: string;
+}
+
+export async function getUserDeviceTokens(
+  id: string
+): Promise<UserDeviceToken[]> {
+  return query<UserDeviceToken>(
+    `SELECT id, token, platform, is_active, updated_at::text
+     FROM device_tokens
+     WHERE user_id = $1
+     ORDER BY is_active DESC, updated_at DESC`,
+    [id]
+  );
+}
+
 export async function getUserSubscription(
   id: string
 ): Promise<UserSubscriptionDetail> {

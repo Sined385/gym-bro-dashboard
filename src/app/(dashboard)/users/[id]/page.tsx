@@ -10,6 +10,7 @@ import {
   getUserEvents,
   getUserAiUsage,
   getUserSubscription,
+  getUserDeviceTokens,
 } from "@/lib/queries";
 import { UserProfileHeader } from "./_components/user-profile-header";
 import { UserSubscription } from "./_components/user-subscription";
@@ -20,6 +21,7 @@ import { UserWorkoutHistory } from "./_components/user-workout-history";
 import { UserPostsList } from "./_components/user-posts-list";
 import { UserActivityTimeline } from "./_components/user-activity-timeline";
 import { UserAiUsage } from "./_components/user-ai-usage";
+import { UserDeviceTokens } from "./_components/user-device-tokens";
 
 export const dynamic = "force-dynamic";
 
@@ -30,7 +32,7 @@ export default async function UserDetailPage({
 }) {
   const { id } = await params;
 
-  const [user, subscription, kpis, workouts, trend, coachStats, posts, events, aiUsage] =
+  const [user, subscription, kpis, workouts, trend, coachStats, posts, events, aiUsage, deviceTokens] =
     await Promise.all([
       getUserDetail(id),
       getUserSubscription(id),
@@ -41,6 +43,7 @@ export default async function UserDetailPage({
       getUserPosts(id, 10),
       getUserEvents(id, 100),
       getUserAiUsage(id).catch(() => []),
+      getUserDeviceTokens(id).catch(() => []),
     ]);
 
   if (!user) {
@@ -67,6 +70,8 @@ export default async function UserDetailPage({
         storekitProductId={subscription.storekitProductId}
         coachMessagesUsed={subscription.coachMessagesUsed}
       />
+
+      <UserDeviceTokens tokens={deviceTokens} />
 
       <UserKPICards data={kpis} />
 

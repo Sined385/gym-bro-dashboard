@@ -812,3 +812,91 @@ export async function getCategoryBreakdown(): Promise<CategoryBreakdown[]> {
     uniqueUsers: parseInt(r.unique_users),
   }));
 }
+
+// ── Promo codes ─────────────────────────────────────────────
+
+export interface PromoCodeRow {
+  id: string;
+  code: string;
+  duration_days: number;
+  expires_at: string;
+  is_active: boolean;
+  created_at: string;
+  redemption_count: number;
+  last_redeemed_at: string | null;
+}
+
+export async function getPromoCodes(): Promise<PromoCodeRow[]> {
+  const rows = await query<{
+    id: string;
+    code: string;
+    duration_days: number;
+    expires_at: string;
+    is_active: boolean;
+    created_at: string;
+    redemption_count: string;
+    last_redeemed_at: string | null;
+  }>(
+    `SELECT pc.id, pc.code, pc.duration_days, pc.expires_at::text,
+            pc.is_active, pc.created_at::text,
+            count(pr.id) AS redemption_count,
+            max(pr.created_at)::text AS last_redeemed_at
+     FROM promo_codes pc
+     LEFT JOIN promo_redemptions pr ON pr.promo_code_id = pc.id
+     GROUP BY pc.id
+     ORDER BY pc.created_at DESC`
+  );
+  return rows.map((r) => ({
+    ...r,
+    redemption_count: parseInt(r.redemption_count),
+  }));
+}
+
+export interface PromoKPIs {
+  totalCodes: number;
+  activeCodes: number;
+  totalRedemptions: number;
+  redemptions7d: number;
+  activePromoUsers: number;
+}
+
+export async function getPromoKPIs(): Promise<PromoKPIs> {
+  const [codes, active, redemptions, recent, promoUsers] = await Promise.all([
+    queryOne<{ count: string }>(`SELECT count(*) FROM promo_codes`),
+    queryOne<{ count: string }>(
+      `SELECT count(*) FROM promo_codes
+       WHERE is_active AND expires_at > NOW()`
+    ),
+    queryOne<{ count: string }>(`SELECT count(*) FROM promo_redemptions`),
+    queryOne<{ count: string }>(
+      `SELECT count(*) FROM promo_redemptions
+       WHERE created_at > NOW() - INTERVAL '7 days'`
+    ),
+    queryOne<{ count: string }>(
+      `SELECT count(*) FROM "User"
+       WHERE premium_source = 'promo' AND is_premium
+         AND (premium_expires_at IS NULL OR premium_expires_at > NOW())`
+    ),
+  ]);
+  return {
+    totalCodes: parseInt(codes?.count ?? "0"),
+    activeCodes: parseInt(active?.count ?? "0"),
+    totalRedemptions: parseInt(redemptions?.count ?? "0"),
+    redemptions7d: parseInt(recent?.count ?? "0"),
+    activePromoUsers: parseInt(promoUsers?.count ?? "0"),
+  };
+}
+
+export async function getPromoRedemptionTrend(days = 30): Promise<TrendPoint[]> {
+  const rows = await query<{ date: string; count: string }>(
+    `SELECT date_trunc('day', created_at)::date::text AS date, count(*) AS count
+     FROM promo_redemptions
+     WHERE created_at > NOW() - ($1 || ' days')::interval
+     GROUP BY 1 ORDER BY 1`,
+    [days]
+  );
+  return fillGaps(
+    rows.map((r) => ({ date: r.date, count: parseInt(r.count) })),
+    days
+  );
+}

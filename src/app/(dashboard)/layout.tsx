@@ -35,6 +35,12 @@ export default function DashboardLayout({
                 Feature Usage
               </Link>
               <Link
+                href="/promo-codes"
+                className="text-gray-400 transition-colors hover:text-gray-200"
+              >
+                Promo Codes
+              </Link>
+              <Link
                 href="/support"
                 className="text-gray-400 transition-colors hover:text-gray-200"
               >

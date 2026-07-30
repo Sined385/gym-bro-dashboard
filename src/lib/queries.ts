@@ -900,3 +900,196 @@ export async function getPromoRedemptionTrend(days = 30): Promise<TrendPoint[]> 
     days
   );
 }
+
+// ── Acquisition & retention ─────────────────────────────────
+
+export interface AcquisitionKPIs {
+  newUsers7d: number;
+  completionRate30d: number; // % of last-30d signups that finished onboarding
+  d1Retention: number; // % of signups active the day after signup (30d window)
+  d7Retention: number; // % of signups active on day 7 (30d window)
+}
+
+export interface AcquisitionPoint {
+  date: string;
+  signups: number;
+  completedOnboarding: number; // signups from that day that (eventually) finished
+}
+
+export interface FunnelStep {
+  stepNumber: number;
+  step: string;
+  users: number;
+}
+
+export interface RetentionCohort {
+  cohortWeek: string;
+  size: number;
+  // % of cohort with any app event in week offset 0..N; null = future week
+  weeks: (number | null)[];
+}
+
+export async function getAcquisitionKPIs(): Promise<AcquisitionKPIs> {
+  const [newUsers, completion, d1, d7] = await Promise.all([
+    queryOne<{ count: string }>(
+      `SELECT count(*) FROM "User" WHERE created_at >= now() - interval '7 days'`
+    ),
+    queryOne<{ total: string; completed: string }>(
+      `SELECT count(*) as total, count(od.user_id) as completed
+       FROM "User" u
+       LEFT JOIN onboarding_data od ON od.user_id = u.id AND od.completed_at IS NOT NULL
+       WHERE u.created_at >= now() - interval '30 days'`
+    ),
+    queryOne<{ total: string; retained: string }>(
+      `SELECT count(*) as total,
+              count(*) FILTER (WHERE EXISTS (
+                SELECT 1 FROM analytics_events ae
+                WHERE ae.user_id = u.id AND ae.created_at::date = u.created_at::date + 1
+              )) as retained
+       FROM "User" u
+       WHERE u.created_at::date BETWEEN current_date - 30 AND current_date - 1`
+    ),
+    queryOne<{ total: string; retained: string }>(
+      `SELECT count(*) as total,
+              count(*) FILTER (WHERE EXISTS (
+                SELECT 1 FROM analytics_events ae
+                WHERE ae.user_id = u.id AND ae.created_at::date = u.created_at::date + 7
+              )) as retained
+       FROM "User" u
+       WHERE u.created_at::date BETWEEN current_date - 36 AND current_date - 7`
+    ),
+  ]);
+
+  const pct = (part: string | undefined, whole: string | undefined) => {
+    const w = parseInt(whole ?? "0");
+    return w > 0 ? Math.round((parseInt(part ?? "0") / w) * 100) : 0;
+  };
+
+  return {
+    newUsers7d: parseInt(newUsers?.count ?? "0"),
+    completionRate30d: pct(completion?.completed, completion?.total),
+    d1Retention: pct(d1?.retained, d1?.total),
+    d7Retention: pct(d7?.retained, d7?.total),
+  };
+}
+
+export async function getAcquisitionTrend(days = 30): Promise<AcquisitionPoint[]> {
+  const rows = await query<{ date: string; signups: string; completed: string }>(
+    `SELECT u.created_at::date::text as date,
+            count(*) as signups,
+            count(od.user_id) as completed
+     FROM "User" u
+     LEFT JOIN onboarding_data od ON od.user_id = u.id AND od.completed_at IS NOT NULL
+     WHERE u.created_at >= now() - make_interval(days => $1)
+     GROUP BY u.created_at::date
+     ORDER BY date`,
+    [days]
+  );
+
+  const map = new Map(rows.map((r) => [r.date, r]));
+  const result: AcquisitionPoint[] = [];
+  const now = new Date();
+  for (let i = days - 1; i >= 0; i--) {
+    const d = new Date(now);
+    d.setDate(d.getDate() - i);
+    const key = d.toISOString().slice(0, 10);
+    const row = map.get(key);
+    result.push({
+      date: key,
+      signups: parseInt(row?.signups ?? "0"),
+      completedOnboarding: parseInt(row?.completed ?? "0"),
+    });
+  }
+  return result;
+}
+
+export async function getOnboardingFunnel(days = 30): Promise<FunnelStep[]> {
+  const rows = await query<{ step_number: string; step: string; users: string }>(
+    `SELECT (properties->>'step_number')::int as step_number,
+            properties->>'step' as step,
+            count(DISTINCT user_id) as users
+     FROM analytics_events
+     WHERE event_name = 'onboarding_step_completed'
+       AND properties->>'step_number' ~ '^[0-9]+$'
+       AND created_at >= now() - make_interval(days => $1)
+     GROUP BY 1, 2
+     ORDER BY 1`,
+    [days]
+  );
+
+  return rows.map((r) => ({
+    stepNumber: parseInt(r.step_number),
+    step: r.step,
+    users: parseInt(r.users),
+  }));
+}
+
+export async function getDauTrend(days = 30): Promise<TrendPoint[]> {
+  const rows = await query<{ date: string; count: string }>(
+    `SELECT created_at::date::text as date, count(DISTINCT user_id) as count
+     FROM analytics_events
+     WHERE created_at >= now() - make_interval(days => $1)
+     GROUP BY created_at::date
+     ORDER BY date`,
+    [days]
+  );
+
+  return fillGaps(
+    rows.map((r) => ({ date: r.date, count: parseInt(r.count) })),
+    days
+  );
+}
+
+export async function getRetentionCohorts(weeks = 8): Promise<RetentionCohort[]> {
+  const [sizes, activity] = await Promise.all([
+    query<{ cohort_week: string; size: string }>(
+      `SELECT date_trunc('week', created_at)::date::text as cohort_week,
+              count(*) as size
+       FROM "User"
+       WHERE created_at >= date_trunc('week', now()) - make_interval(weeks => $1 - 1)
+       GROUP BY 1 ORDER BY 1`,
+      [weeks]
+    ),
+    query<{ cohort_week: string; week_offset: string; active: string }>(
+      `SELECT date_trunc('week', u.created_at)::date::text as cohort_week,
+              ((date_trunc('week', ae.created_at)::date
+                - date_trunc('week', u.created_at)::date) / 7)::int as week_offset,
+              count(DISTINCT ae.user_id) as active
+       FROM analytics_events ae
+       JOIN "User" u ON u.id = ae.user_id
+       WHERE u.created_at >= date_trunc('week', now()) - make_interval(weeks => $1 - 1)
+         AND ae.created_at >= date_trunc('week', u.created_at)
+       GROUP BY 1, 2
+       ORDER BY 1, 2`,
+      [weeks]
+    ),
+  ]);
+
+  const activityMap = new Map<string, Map<number, number>>();
+  for (const row of activity) {
+    const offset = parseInt(row.week_offset);
+    if (offset < 0) continue;
+    if (!activityMap.has(row.cohort_week)) activityMap.set(row.cohort_week, new Map());
+    activityMap.get(row.cohort_week)!.set(offset, parseInt(row.active));
+  }
+
+  const currentWeek = new Date();
+  return sizes.map((s) => {
+    const size = parseInt(s.size);
+    const cohortDate = new Date(s.cohort_week);
+    const maxOffset = Math.floor(
+      (currentWeek.getTime() - cohortDate.getTime()) / (7 * 24 * 3600 * 1000)
+    );
+    const perOffset = activityMap.get(s.cohort_week);
+    const weekCells: (number | null)[] = [];
+    for (let offset = 0; offset < weeks; offset++) {
+      if (offset > maxOffset) {
+        weekCells.push(null); // week hasn't happened yet for this cohort
+      } else {
+        const active = perOffset?.get(offset) ?? 0;
+        weekCells.push(size > 0 ? Math.round((active / size) * 100) : 0);
+      }
+    }
+    return { cohortWeek: s.cohort_week, size, weeks: weekCells };
+  });
+}

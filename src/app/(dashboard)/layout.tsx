@@ -23,6 +23,12 @@ export default function DashboardLayout({
                 Dashboard
               </Link>
               <Link
+                href="/acquisition"
+                className="text-gray-400 transition-colors hover:text-gray-200"
+              >
+                Acquisition
+              </Link>
+              <Link
                 href="/ai-usage"
                 className="text-gray-400 transition-colors hover:text-gray-200"
               >
